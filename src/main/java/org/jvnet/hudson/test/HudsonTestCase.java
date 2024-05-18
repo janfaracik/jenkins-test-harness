@@ -137,6 +137,10 @@ import org.acegisecurity.GrantedAuthority;
 import org.acegisecurity.userdetails.UserDetails;
 import org.acegisecurity.userdetails.UsernameNotFoundException;
 import org.apache.commons.beanutils.PropertyUtils;
+import org.eclipse.jetty.ee8.webapp.Configuration;
+import org.eclipse.jetty.ee8.webapp.WebAppContext;
+import org.eclipse.jetty.ee8.webapp.WebXmlConfiguration;
+import org.eclipse.jetty.ee8.websocket.server.config.JettyWebSocketServletContainerInitializer;
 import org.eclipse.jetty.http.HttpCompliance;
 import org.eclipse.jetty.http.MimeTypes;
 import org.eclipse.jetty.http.UriCompliance;
@@ -149,10 +153,6 @@ import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jetty.util.security.Password;
 import org.eclipse.jetty.util.thread.QueuedThreadPool;
-import org.eclipse.jetty.webapp.Configuration;
-import org.eclipse.jetty.webapp.WebAppContext;
-import org.eclipse.jetty.webapp.WebXmlConfiguration;
-import org.eclipse.jetty.websocket.server.config.JettyWebSocketServletContainerInitializer;
 import org.htmlunit.AjaxController;
 import org.htmlunit.AlertHandler;
 import org.htmlunit.BrowserVersion;
@@ -548,7 +548,13 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
         server = new Server(qtp);
 
         explodedWarDir = WarExploder.getExplodedDir();
-        WebAppContext context = new WebAppContext(explodedWarDir.getPath(), contextPath);
+        WebAppContext context = new WebAppContext(explodedWarDir.getPath(), contextPath) {
+            @Override
+            protected ClassLoader configureClassLoader(ClassLoader loader) {
+                // Use flat classpath in tests
+                return loader;
+            }
+        };
         context.setResourceBase(explodedWarDir.getPath());
         context.setClassLoader(getClass().getClassLoader());
         context.setConfigurations(new Configuration[]{new WebXmlConfiguration()});
@@ -1815,9 +1821,10 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
      * @deprecated removed without replacement
      */
     @Deprecated
-    public static final MimeTypes MIME_TYPES = new MimeTypes();
+    public static final MimeTypes MIME_TYPES = new MimeTypes.Mutable();
     static {
-        MIME_TYPES.addMimeMapping("js","text/javascript");
+        // TODO delete this field
+        ((MimeTypes.Mutable) MIME_TYPES).addMimeMapping("js","text/javascript");
         Functions.DEBUG_YUI = true;
 
         if (Functions.isGlibcSupported()) {
