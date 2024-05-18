@@ -62,7 +62,7 @@ import org.junit.Assert;
 public class UnitTestSupportingPluginManager extends PluginManager {
 
     public UnitTestSupportingPluginManager(File rootDir) {
-        super(null, new File(rootDir, "plugins"));
+        super((jakarta.servlet.ServletContext) null, new File(rootDir, "plugins"));
     }
 
     /** @see LocalPluginManager#loadBundledPlugins */

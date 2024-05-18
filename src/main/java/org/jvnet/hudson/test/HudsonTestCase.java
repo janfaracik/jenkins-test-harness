@@ -88,6 +88,8 @@ import hudson.util.PersistedList;
 import hudson.util.ReflectionUtils;
 import hudson.util.StreamTaskListener;
 import hudson.util.jna.GNUCLibrary;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletContextEvent;
 import java.beans.PropertyDescriptor;
 import java.io.BufferedReader;
 import java.io.File;
@@ -124,8 +126,6 @@ import java.util.logging.Filter;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletContextEvent;
 import jenkins.model.Jenkins;
 import jenkins.model.JenkinsAdaptor;
 import jenkins.model.JenkinsLocationConfiguration;
@@ -137,10 +137,10 @@ import org.acegisecurity.GrantedAuthority;
 import org.acegisecurity.userdetails.UserDetails;
 import org.acegisecurity.userdetails.UsernameNotFoundException;
 import org.apache.commons.beanutils.PropertyUtils;
-import org.eclipse.jetty.ee8.webapp.Configuration;
-import org.eclipse.jetty.ee8.webapp.WebAppContext;
-import org.eclipse.jetty.ee8.webapp.WebXmlConfiguration;
-import org.eclipse.jetty.ee8.websocket.server.config.JettyWebSocketServletContainerInitializer;
+import org.eclipse.jetty.ee9.webapp.Configuration;
+import org.eclipse.jetty.ee9.webapp.WebAppContext;
+import org.eclipse.jetty.ee9.webapp.WebXmlConfiguration;
+import org.eclipse.jetty.ee9.websocket.server.config.JettyWebSocketServletContainerInitializer;
 import org.eclipse.jetty.http.HttpCompliance;
 import org.eclipse.jetty.http.MimeTypes;
 import org.eclipse.jetty.http.UriCompliance;
@@ -192,8 +192,8 @@ import org.kohsuke.stapler.Dispatcher;
 import org.kohsuke.stapler.MetaClass;
 import org.kohsuke.stapler.MetaClassLoader;
 import org.kohsuke.stapler.Stapler;
-import org.kohsuke.stapler.StaplerRequest;
-import org.kohsuke.stapler.StaplerResponse;
+import org.kohsuke.stapler.StaplerRequest2;
+import org.kohsuke.stapler.StaplerResponse2;
 import org.springframework.dao.DataAccessException;
 import org.xml.sax.SAXException;
 
@@ -352,9 +352,9 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
         
         jenkins.setCrumbIssuer(new TestCrumbIssuer());
 
-        jenkins.servletContext.setAttribute("app", jenkins);
-        jenkins.servletContext.setAttribute("version","?");
-        WebAppMain.installExpressionFactory(new ServletContextEvent(jenkins.servletContext));
+        jenkins.getServletContext().setAttribute("app", jenkins);
+        jenkins.getServletContext().setAttribute("version","?");
+        WebAppMain.installExpressionFactory(new ServletContextEvent(jenkins.getServletContext()));
         JenkinsLocationConfiguration.get().setUrl(getURL().toString());
 
         // set a default JDK to be the one that the harness is using.
@@ -1414,7 +1414,7 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
      *
      * <p>
      * This method allows you to do just that. It is useful for testing some methods that
-     * require {@link StaplerRequest} and {@link StaplerResponse}, or getting the credential
+     * require {@link StaplerRequest2} and {@link StaplerResponse2}, or getting the credential
      * of the current user (via {@link jenkins.model.Jenkins#getAuthentication()}, and so on.
      *
      * @param c
@@ -1561,7 +1561,7 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
          *
          * <p>
          * This method allows you to do just that. It is useful for testing some methods that
-         * require {@link StaplerRequest} and {@link StaplerResponse}, or getting the credential
+         * require {@link StaplerRequest2} and {@link StaplerResponse2}, or getting the credential
          * of the current user (via {@link jenkins.model.Jenkins#getAuthentication()}, and so on.
          *
          * @param c
@@ -1581,7 +1581,7 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
                 @Override
                 public void run() {
                     try {
-                        StaplerResponse rsp = Stapler.getCurrentResponse();
+                        StaplerResponse2 rsp = Stapler.getCurrentResponse2();
                         rsp.setStatus(200);
                         rsp.setContentType("text/html");
                         r.add(c.call());
@@ -1740,7 +1740,7 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
         public WebRequest addCrumb(WebRequest req) {
             NameValuePair crumb = new NameValuePair(
                     jenkins.getCrumbIssuer().getDescriptor().getCrumbRequestField(),
-                    jenkins.getCrumbIssuer().getCrumb( null ));
+                    jenkins.getCrumbIssuer().getCrumb((jakarta.servlet.ServletRequest) null ));
             req.setRequestParameters(List.of(crumb));
             return req;
         }
@@ -1751,7 +1751,7 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
         public URL createCrumbedUrl(String relativePath) throws IOException {
             CrumbIssuer issuer = jenkins.getCrumbIssuer();
             String crumbName = issuer.getDescriptor().getCrumbRequestField();
-            String crumb = issuer.getCrumb(null);
+            String crumb = issuer.getCrumb((jakarta.servlet.ServletRequest) null);
             
             return new URL(getContextPath()+relativePath+"?"+crumbName+"="+crumb);
         }
@@ -1859,7 +1859,7 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
             }
 
             @Override
-            public BuildWrapper newInstance(StaplerRequest req, @NonNull JSONObject formData) {
+            public BuildWrapper newInstance(StaplerRequest2 req, @NonNull JSONObject formData) {
                 throw new UnsupportedOperationException();
             }
         }

@@ -43,6 +43,7 @@ import hudson.model.ViewGroupMixIn;
 import hudson.model.listeners.ItemListener;
 import hudson.views.DefaultViewsTabBar;
 import hudson.views.ViewsTabBar;
+import jakarta.servlet.ServletException;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -53,12 +54,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
-import javax.servlet.ServletException;
 import jenkins.model.DirectlyModifiableTopLevelItemGroup;
 import jenkins.model.Jenkins;
 import org.kohsuke.stapler.StaplerFallback;
-import org.kohsuke.stapler.StaplerRequest;
-import org.kohsuke.stapler.StaplerResponse;
+import org.kohsuke.stapler.StaplerRequest2;
+import org.kohsuke.stapler.StaplerResponse2;
 import org.kohsuke.stapler.WebMethod;
 
 /**
@@ -162,7 +162,7 @@ public class MockFolder extends AbstractItem implements DirectlyModifiableTopLev
         return type.cast(createProject((TopLevelItemDescriptor) Jenkins.get().getDescriptorOrDie(type), name, true));
     }
 
-    @Override public TopLevelItem doCreateItem(StaplerRequest req, StaplerResponse rsp) throws IOException, ServletException {
+    @Override public TopLevelItem doCreateItem(StaplerRequest2 req, StaplerResponse2 rsp) throws IOException, ServletException {
         return mixin().createTopLevelItem(req, rsp);
     }
 
