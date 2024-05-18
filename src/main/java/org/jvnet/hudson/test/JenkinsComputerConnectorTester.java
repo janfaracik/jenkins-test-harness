@@ -28,9 +28,8 @@ import hudson.model.AbstractDescribableImpl;
 import hudson.model.Descriptor;
 import hudson.slaves.ComputerConnector;
 import hudson.slaves.ComputerConnectorDescriptor;
-import java.io.IOException;
 import java.util.List;
-import javax.servlet.ServletException;
+import net.sf.json.JSONObject;
 import org.kohsuke.stapler.StaplerRequest;
 
 /**
@@ -48,8 +47,14 @@ public class JenkinsComputerConnectorTester extends AbstractDescribableImpl<Jenk
         this.jenkinsRule = testCase;
     }
 
-    public void doConfigSubmit(StaplerRequest req) throws IOException, ServletException {
-        connector = req.bindJSON(ComputerConnector.class, req.getSubmittedForm().getJSONObject("connector"));
+    public void doConfigSubmit(StaplerRequest req) {
+        JSONObject form;
+        try {
+            form = req.getSubmittedForm();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        connector = req.bindJSON(ComputerConnector.class, form.getJSONObject("connector"));
     }
 
     public List<ComputerConnectorDescriptor> getConnectorDescriptors() {

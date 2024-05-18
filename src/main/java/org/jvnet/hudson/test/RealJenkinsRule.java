@@ -1251,8 +1251,10 @@ public final class RealJenkinsRule implements TestRule {
         private static final ExecutorService STEP_RUNNER = Executors.newSingleThreadExecutor(
                 new NamingThreadFactory(Executors.defaultThreadFactory(), RealJenkinsRule.class.getName() + ".STEP_RUNNER"));
         @POST
+        @SuppressFBWarnings(value = "BC_VACUOUS_INSTANCEOF", justification = "TODO needs triage")
         public void doStep(StaplerRequest req, StaplerResponse rsp) throws Throwable {
-            InputPayload input = (InputPayload) Init2.readSer(req.getInputStream(), Endpoint.class.getClassLoader());
+            InputStream is = req instanceof jakarta.servlet.ServletRequest ? ((jakarta.servlet.ServletRequest) req).getInputStream() : ((javax.servlet.ServletRequest) req).getInputStream();
+            InputPayload input = (InputPayload) Init2.readSer(is, Endpoint.class.getClassLoader());
             checkToken(input.token);
             Step2<?> s = input.step;
             URL url = input.url;
@@ -1273,7 +1275,8 @@ public final class RealJenkinsRule implements TestRule {
             } catch (CancellationException | InterruptedException e) {
                 err = e;
             }
-            Init2.writeSer(rsp.getOutputStream(), new OutputPayload(object, err));
+            OutputStream os = rsp instanceof jakarta.servlet.ServletResponse ? ((jakarta.servlet.ServletResponse) rsp).getOutputStream() : ((javax.servlet.ServletResponse) rsp).getOutputStream();
+            Init2.writeSer(os, new OutputPayload(object, err));
         }
         public HttpResponse doExit(@QueryParameter String token) throws IOException {
             checkToken(token);

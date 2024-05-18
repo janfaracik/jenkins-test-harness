@@ -88,6 +88,8 @@ import hudson.util.PersistedList;
 import hudson.util.ReflectionUtils;
 import hudson.util.StreamTaskListener;
 import hudson.util.jna.GNUCLibrary;
+import jakarta.servlet.ServletContext;
+import jakarta.servlet.ServletContextEvent;
 import java.beans.PropertyDescriptor;
 import java.io.BufferedReader;
 import java.io.File;
@@ -98,6 +100,7 @@ import java.lang.management.ThreadInfo;
 import java.lang.reflect.Array;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -124,8 +127,6 @@ import java.util.logging.Filter;
 import java.util.logging.Level;
 import java.util.logging.LogRecord;
 import java.util.logging.Logger;
-import javax.servlet.ServletContext;
-import javax.servlet.ServletContextEvent;
 import jenkins.model.Jenkins;
 import jenkins.model.JenkinsAdaptor;
 import jenkins.model.JenkinsLocationConfiguration;
@@ -137,10 +138,10 @@ import org.acegisecurity.GrantedAuthority;
 import org.acegisecurity.userdetails.UserDetails;
 import org.acegisecurity.userdetails.UsernameNotFoundException;
 import org.apache.commons.beanutils.PropertyUtils;
-import org.eclipse.jetty.ee8.webapp.Configuration;
-import org.eclipse.jetty.ee8.webapp.WebAppContext;
-import org.eclipse.jetty.ee8.webapp.WebXmlConfiguration;
-import org.eclipse.jetty.ee8.websocket.server.config.JettyWebSocketServletContainerInitializer;
+import org.eclipse.jetty.ee9.webapp.Configuration;
+import org.eclipse.jetty.ee9.webapp.WebAppContext;
+import org.eclipse.jetty.ee9.webapp.WebXmlConfiguration;
+import org.eclipse.jetty.ee9.websocket.server.config.JettyWebSocketServletContainerInitializer;
 import org.eclipse.jetty.http.HttpCompliance;
 import org.eclipse.jetty.http.MimeTypes;
 import org.eclipse.jetty.http.UriCompliance;
@@ -352,9 +353,44 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
         
         jenkins.setCrumbIssuer(new TestCrumbIssuer());
 
-        jenkins.servletContext.setAttribute("app", jenkins);
-        jenkins.servletContext.setAttribute("version","?");
-        WebAppMain.installExpressionFactory(new ServletContextEvent(jenkins.servletContext));
+        if (_isEE9Plus()) {
+            ServletContext servletContext;
+            try {
+                servletContext = (ServletContext) Jenkins.class.getDeclaredMethod("getServletContext").invoke(jenkins);
+            } catch (NoSuchMethodException e) {
+                throw new AssertionError(e);
+            } catch (InvocationTargetException e) {
+                Throwable t = e.getCause();
+                if (t instanceof Exception) {
+                    throw (Exception) t;
+                } else if (t instanceof Error) {
+                    throw (Error) t;
+                } else {
+                    throw e;
+                }
+            }
+            servletContext.setAttribute("app", jenkins);
+            servletContext.setAttribute("version", "?");
+            try {
+                WebAppMain.class.getDeclaredMethod("installExpressionFactory", ServletContextEvent.class).invoke(null, new ServletContextEvent(servletContext));
+            } catch (NoSuchMethodException e) {
+                throw new AssertionError(e);
+            } catch (InvocationTargetException e) {
+                Throwable t = e.getCause();
+                if (t instanceof Exception) {
+                    throw (Exception) t;
+                } else if (t instanceof Error) {
+                    throw (Error) t;
+                } else {
+                    throw e;
+                }
+            }
+        } else {
+            javax.servlet.ServletContext servletContext = jenkins.servletContext;
+            servletContext.setAttribute("app", jenkins);
+            servletContext.setAttribute("version", "?");
+            WebAppMain.installExpressionFactory(new javax.servlet.ServletContextEvent(servletContext));
+        }
         JenkinsLocationConfiguration.get().setUrl(getURL().toString());
 
         // set a default JDK to be the one that the harness is using.
@@ -376,6 +412,15 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
         Jenkins.lookup(Injector.class).injectMembers(this);
 
         setUpTimeout();
+    }
+
+    private static boolean _isEE9Plus() {
+        try {
+            Jenkins.class.getDeclaredMethod("getServletContext");
+            return true;
+        } catch (NoSuchMethodException e) {
+            return false;
+        }
     }
 
     protected void setUpTimeout() {
@@ -403,7 +448,8 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
      * By default, we load updates from local proxy to avoid network traffic as much as possible.
      */
     protected void configureUpdateCenter() throws Exception {
-        final String updateCenterUrl = "http://localhost:"+ JavaNetReverseProxy.getInstance().localPort+"/update-center.json";
+        int localPort = _isEE9Plus() ? JavaNetReverseProxy2.getInstance().localPort : JavaNetReverseProxy.getInstance().localPort;
+        final String updateCenterUrl = "http://localhost:" + localPort + "/update-center.json";
 
         // don't waste bandwidth talking to the update center
         DownloadService.neverUpdate = true;
@@ -517,11 +563,34 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
      * you can override it.
      */
     protected Hudson newHudson() throws Exception {
-        File home = homeLoader.allocate();
-        for (Runner r : recipes) {
-            r.decorateHome(this,home);
+        if (_isEE9Plus()) {
+            File home = homeLoader.allocate();
+            for (Runner r : recipes) {
+                r.decorateHome(this,home);
+            }
+            try {
+                return Hudson.class
+                        .getDeclaredConstructor(File.class, ServletContext.class, PluginManager.class)
+                        .newInstance(home, createWebServer2(), useLocalPluginManager ? null : pluginManager);
+            } catch (NoSuchMethodException e) {
+                throw new AssertionError(e);
+            } catch (InvocationTargetException e) {
+                Throwable t = e.getCause();
+                if (t instanceof Exception) {
+                    throw (Exception) t;
+                } else if (t instanceof Error) {
+                    throw (Error) t;
+                } else {
+                    throw e;
+                }
+            }
+        } else {
+            File home = homeLoader.allocate();
+            for (Runner r : recipes) {
+                r.decorateHome(this,home);
+            }
+            return new Hudson(home, createWebServer(), useLocalPluginManager ? null : pluginManager);
         }
-        return new Hudson(home, createWebServer(), useLocalPluginManager ? null : pluginManager);
     }
 
     /**
@@ -542,7 +611,7 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
      * Prepares a webapp hosting environment to get {@link ServletContext} implementation
      * that we need for testing.
      */
-    protected ServletContext createWebServer() throws Exception {
+    protected ServletContext createWebServer2() throws Exception {
         QueuedThreadPool qtp = new QueuedThreadPool();
         qtp.setName("Jetty (HudsonTestCase)");
         server = new Server(qtp);
@@ -558,10 +627,56 @@ public abstract class HudsonTestCase extends TestCase implements RootAction {
         context.setResourceBase(explodedWarDir.getPath());
         context.setClassLoader(getClass().getClassLoader());
         context.setConfigurations(new Configuration[]{new WebXmlConfiguration()});
-        context.addBean(new NoListenerConfiguration(context));
+        context.addBean(new NoListenerConfiguration2(context));
         context.setServer(server);
         server.setHandler(context);
         JettyWebSocketServletContainerInitializer.configure(context, null);
+        context.getSecurityHandler().setLoginService(configureUserRealm());
+
+        ServerConnector connector = new ServerConnector(server);
+
+        HttpConfiguration config = connector.getConnectionFactory(HttpConnectionFactory.class).getHttpConfiguration();
+        // use a bigger buffer as Stapler traces can get pretty large on deeply nested URL
+        config.setRequestHeaderSize(12 * 1024);
+        config.setHttpCompliance(HttpCompliance.RFC7230);
+        config.setUriCompliance(UriCompliance.LEGACY);
+        connector.setHost("localhost");
+
+        server.addConnector(connector);
+        server.start();
+
+        localPort = connector.getLocalPort();
+
+        return context.getServletContext();
+    }
+
+    /**
+     * Prepares a webapp hosting environment to get {@link javax.servlet.ServletContext} implementation
+     * that we need for testing.
+     *
+     * @deprecated use {@link #createWebServer2()}
+     */
+    @Deprecated
+    protected javax.servlet.ServletContext createWebServer() throws Exception {
+        QueuedThreadPool qtp = new QueuedThreadPool();
+        qtp.setName("Jetty (HudsonTestCase)");
+        server = new Server(qtp);
+
+        explodedWarDir = WarExploder.getExplodedDir();
+        org.eclipse.jetty.ee8.webapp.WebAppContext context = new org.eclipse.jetty.ee8.webapp.WebAppContext(explodedWarDir.getPath(), contextPath) {
+            @Override
+            protected ClassLoader configureClassLoader(ClassLoader loader) {
+                // Use flat classpath in tests
+                return loader;
+            }
+        };
+        context.setResourceBase(explodedWarDir.getPath());
+        context.setClassLoader(getClass().getClassLoader());
+        context.setConfigurations(new org.eclipse.jetty.ee8.webapp.Configuration[]{new org.eclipse.jetty.ee8.webapp.WebXmlConfiguration()});
+        context.addBean(new NoListenerConfiguration(context));
+        context.setServer(server);
+        server.setHandler(context);
+        org.eclipse.jetty.ee8.websocket.server.config.JettyWebSocketServletContainerInitializer.configure(context, null);
         context.getSecurityHandler().setLoginService(configureUserRealm());
 
         ServerConnector connector = new ServerConnector(server);
